@@ -1,8 +1,9 @@
 package com.example
 
-import cats.{Applicative, Apply}
+import cats._
+import cats.implicits._
 
-object ApplicativeStuff {
+object ApplicativeStuff extends App {
 
   sealed trait Validated[+A]
   case class Valid[+A](a: A) extends Validated[A]
@@ -63,9 +64,53 @@ object ApplicativeStuff {
     def map2ByApAndPure[A, B, C](va: Validated[A], vb: Validated[B])(f: (A, B) => C): Validated[C] = {
       val fun: A => B => C = a => b => f(a, b)
       val first: Validated[A => B => C] = pure(fun)
-      val second: Validated[B => C] = ap(pure(fun))(va)
+      val second: Validated[B => C] = ap(first)(va)
       ap(second)(vb)
+    }
+
+    def tupledWithAP[A, B](va: Validated[A], vb: Validated[B]): Validated[(A, B)] = {
+      val fun: A => B => (A, B) = a => b => (a, b)
+      val fun1: Validated[A => B => (A, B)] = pure(fun)
+      val fun2: Validated[B => (A, B)] = ap(fun1)(va)
+      ap(fun2)(vb)
+    }
+
+    def tupledWithMAP2[A, B](va: Validated[A], vb: Validated[B]): Validated[(A, B)] = {
+      map2(va, vb)((a, b) => (a, b))
+    }
+
+  }
+  val v1: Validated[Int] = Applicative[Validated].pure(1)
+  val v2: Validated[Int] = Applicative[Validated].pure(2)
+  val v3: Validated[Int] = Applicative[Validated].pure(3)
+
+  (v1, v2, v3).mapN((a, b, c) => a + b + c)
+  (v1, v2).mapN((a, b) => a + b)
+
+  val optionApplicative: Applicative[Option] = new Applicative[Option] {
+    override def pure[A](x: A): Option[A] = Some(x)
+
+    override def ap[A, B](ff: Option[A => B])(fa: Option[A]): Option[B] = (ff, fa) match {
+      case (Some(f), Some(a)) => Some(f(a))
+      case _ => None
     }
   }
 
+  println(optionApplicative.map2(Some(3), Some(4))(_ + _))
+
+  val listApplicative: Applicative[List] = new Applicative[List] {
+    override def pure[A](x: A): List[A] = List(x)
+
+/*    override def ap[A, B](ff: List[A => B])(fa: List[A]): List[B] =
+      fa.flatMap(a => ff.map(f => f(a)))*/
+
+    override def ap[A, B](ff: List[A => B])(fa: List[A]): List[B] = (ff, fa) match {
+      case (f :: fs, a :: as) => (a :: as).fmap(f) ++ ap(fs)(a :: as)
+      case _ => Nil
+    }
+  }
+
+
+  println(listApplicative.map2(List(1, 2, 3), List(4, 5, 6))(_ + _))
+  println(listApplicative.map2[Int, Int, Int](List(), List(4, 5, 6))(_ + _))
 }
